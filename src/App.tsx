@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useRef, useState, useEffect } from 'react';
 import ReactFlow, {
   Controls,
   Background,
@@ -92,28 +92,62 @@ function Flow() {
     }
   }, [rfInstance]);
 
+  // --- Handle loading a diagram in a new tab ---
+  useEffect(() => {
+    if (!rfInstance) return;
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const loadId = urlParams.get('load');
+    
+    if (loadId) {
+      const dataStr = localStorage.getItem(`system-design-load-${loadId}`);
+      if (dataStr) {
+        try {
+          const flow = JSON.parse(dataStr);
+          if (flow) {
+            const { x = 0, y = 0, zoom = 1 } = flow.viewport || {};
+            setNodes(flow.nodes || []);
+            setEdges(flow.edges || []);
+            // Wait slightly for nodes to mount before setting viewport
+            setTimeout(() => {
+              rfInstance.setViewport({ x, y, zoom });
+            }, 50);
+          }
+        } catch (err) {
+          console.error('Failed to parse loaded flow', err);
+        }
+        // Clean up storage
+        localStorage.removeItem(`system-design-load-${loadId}`);
+      }
+      
+      // Clean up URL
+      const newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
+      window.history.replaceState({ path: newUrl }, '', newUrl);
+    }
+  }, [rfInstance, setNodes, setEdges]);
+
   const onRestore = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
       const reader = new FileReader();
       reader.onload = (e) => {
+        const fileContent = e.target?.result as string;
+        const id = Date.now().toString();
         try {
-          const flow = JSON.parse(e.target?.result as string);
-          if (flow) {
-            const { x = 0, y = 0, zoom = 1 } = flow.viewport;
-            setNodes(flow.nodes || []);
-            setEdges(flow.edges || []);
-            rfInstance?.setViewport({ x, y, zoom });
-          }
+          // Store the file content temporarily in localStorage
+          localStorage.setItem(`system-design-load-${id}`, fileContent);
+          // Open the app in a new tab with the load ID
+          window.open(window.location.pathname + '?load=' + id, '_blank');
         } catch (err) {
-          console.error('Failed to parse flow file', err);
+          console.error('Failed to store flow for new tab', err);
+          alert('Error: File is too large or localStorage is blocked.');
         }
       };
       reader.readAsText(file);
     }
     // reset input so the same file can be loaded again if needed
     event.target.value = '';
-  }, [rfInstance, setNodes, setEdges]);
+  }, []);
 
   return (
     <div
