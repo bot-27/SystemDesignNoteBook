@@ -121,11 +121,29 @@ function CustomNode({ id, data }: NodeProps) {
     );
   }, [id, noteValue, setNodes]);
 
+
+  // Determine simulation status styling
+  const status = data.status as string | undefined;
+  const isCrashed = status === 'crashed';
+  const isHealthy = status === 'healthy';
+
+  const containerBorder = isCrashed
+    ? '2px solid #ef4444'
+    : isHealthy
+      ? '2px solid #22c55e'
+      : '1px solid #334155';
+
+  const containerAnimation = isCrashed
+    ? 'crash-pulse 1.2s ease-in-out infinite'
+    : isHealthy
+      ? 'healthy-pulse 2s ease-in-out infinite'
+      : 'none';
+
   return (
     <div
       style={{
-        background: '#1e293b',
-        border: '1px solid #334155',
+        background: isCrashed ? '#1a1015' : '#1e293b',
+        border: containerBorder,
         borderRadius: 10,
         padding: '10px 16px',
         minWidth: 160,
@@ -133,13 +151,43 @@ function CustomNode({ id, data }: NodeProps) {
         display: 'flex',
         flexDirection: 'column',
         gap: 12,
+        animation: containerAnimation,
+        transition: 'background 0.3s, border 0.3s',
+        position: 'relative',
       }}
     >
-      {/* Handles — top & left are targets, bottom & right are sources */}
-      <Handle type="target" position={Position.Top}    id="t" style={{ ...handleStyle, background: '#60a5fa' }} />
-      <Handle type="target" position={Position.Left}   id="l" style={{ ...handleStyle, background: '#60a5fa' }} />
-      <Handle type="source" position={Position.Bottom} id="b" style={{ ...handleStyle, background: '#4ade80' }} />
-      <Handle type="source" position={Position.Right}  id="r" style={{ ...handleStyle, background: '#4ade80' }} />
+      {/* Crash badge */}
+      {isCrashed && (
+        <div style={{
+          position: 'absolute',
+          top: -10,
+          right: -6,
+          background: 'linear-gradient(135deg, #dc2626 0%, #ef4444 100%)',
+          color: '#fff',
+          fontSize: 9,
+          fontWeight: 700,
+          padding: '2px 8px',
+          borderRadius: 6,
+          fontFamily: 'Inter, system-ui, sans-serif',
+          letterSpacing: '0.05em',
+          boxShadow: '0 2px 8px rgba(239, 68, 68, 0.4)',
+          zIndex: 10,
+        }}>
+          ⚠ OVERLOADED
+        </div>
+      )}
+      {/* Handles — every side has both source & target for full flexibility */}
+      <Handle type="target" position={Position.Top}    id="t-in"  style={{ ...handleStyle, background: '#60a5fa', zIndex: 1 }} />
+      <Handle type="source" position={Position.Top}    id="t-out" style={{ ...handleStyle, background: '#60a5fa', zIndex: 2, opacity: 0 }} />
+
+      <Handle type="target" position={Position.Right}  id="r-in"  style={{ ...handleStyle, background: '#60a5fa', zIndex: 1 }} />
+      <Handle type="source" position={Position.Right}  id="r-out" style={{ ...handleStyle, background: '#60a5fa', zIndex: 2, opacity: 0 }} />
+
+      <Handle type="target" position={Position.Bottom} id="b-in"  style={{ ...handleStyle, background: '#60a5fa', zIndex: 1 }} />
+      <Handle type="source" position={Position.Bottom} id="b-out" style={{ ...handleStyle, background: '#60a5fa', zIndex: 2, opacity: 0 }} />
+
+      <Handle type="target" position={Position.Left}   id="l-in"  style={{ ...handleStyle, background: '#60a5fa', zIndex: 1 }} />
+      <Handle type="source" position={Position.Left}   id="l-out" style={{ ...handleStyle, background: '#60a5fa', zIndex: 2, opacity: 0 }} />
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'space-between', width: '100%' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

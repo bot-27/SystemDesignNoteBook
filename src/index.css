@@ -19,7 +19,6 @@ body {
   color: #e2e8f0;
 }
 
-/* ReactFlow control button overrides for dark theme */
 .react-flow__controls-button {
   background: #1e293b !important;
   border: 1px solid #334155 !important;
@@ -28,3 +27,78 @@ body {
 .react-flow__controls-button:hover {
   background: #334155 !important;
 }
+
+/* ── Staff Suite: Crash pulse (red) ── */
+@keyframes crash-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4), 0 4px 20px rgba(0,0,0,0.4); border-color: #ef4444; }
+  50%      { box-shadow: 0 0 16px 4px rgba(239, 68, 68, 0.25), 0 4px 20px rgba(0,0,0,0.4); border-color: #fca5a5; }
+}
+
+/* ── Staff Suite: Healthy pulse (green) ── */
+@keyframes healthy-pulse {
+  0%, 100% { border-color: #22c55e; }
+  50%      { border-color: #4ade80; }
+}
+
+/* ── Staff Suite: Drawer slide-in ── */
+@keyframes drawer-slideIn {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+@keyframes drawer-fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ── Staff Suite: AI loading skeleton shimmer ── */
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ── Staff Suite: AI brain pulse ── */
+@keyframes ai-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50%      { transform: scale(1.08); opacity: 0.7; }
+}
+
+/* ── Staff Suite: Simulation controls fade-in ── */
+@keyframes sim-fadeIn {
+  from { opacity: 0; transform: translateX(-8px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* ── Staff Suite: Spinner ── */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* ── Staff Suite: Custom range slider thumb ── */
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #e2e8f0;
+  border: 2px solid #0f172a;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+}
+input[type="range"]::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #e2e8f0;
+  border: 2px solid #0f172a;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+}
+
+/* ── Staff Suite: AI drawer content scrollbar ── */
+.ai-drawer-content::-webkit-scrollbar { width: 6px; }
+.ai-drawer-content::-webkit-scrollbar-track { background: transparent; }
+.ai-drawer-content::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+.ai-drawer-content::-webkit-scrollbar-thumb:hover { background: #475569; }
+

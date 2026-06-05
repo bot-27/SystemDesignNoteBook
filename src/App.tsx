@@ -1,25 +1,39 @@
-import { useCallback, useRef, useState, useEffect } from 'react';
+import { useCallback, useRef, useState, useEffect, useMemo } from 'react';
 import ReactFlow, {
   Controls,
   Background,
   MiniMap,
   Panel,
   addEdge,
+  updateEdge,
   useNodesState,
   useEdgesState,
   ReactFlowProvider,
   MarkerType,
   BackgroundVariant,
   type Connection,
+  type Edge,
   type ReactFlowInstance,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 
-import { Save, Upload } from 'lucide-react';
+import { Save, Upload, FileCode2, Brain } from 'lucide-react';
+
+import ExportModal from './components/ExportModal';
+import { parseGraphToIaC } from './utils/parseGraphToIaC';
+import { generateKubernetesYAML, generateGoProject } from './utils/iacGenerators';
 
 import Sidebar from './components/Sidebar';
 import CustomNode from './components/CustomNode';
 import EditableEdge from './components/EditableEdge';
+
+// Staff Engineer Suite
+import { useCostCalculator } from './hooks/useCostCalculator';
+import { useTrafficSimulation } from './hooks/useTrafficSimulation';
+import { useArchitectureReview } from './hooks/useArchitectureReview';
+import CostWidget from './components/CostWidget';
+import SimulationControls from './components/SimulationControls';
+import AIReviewDrawer from './components/AIReviewDrawer';
 
 // Register custom types outside component to keep references stable
 const nodeTypes = { custom: CustomNode };
@@ -33,6 +47,13 @@ function Flow() {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [rfInstance, setRfInstance] = useState<ReactFlowInstance | null>(null);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [aiDrawerOpen, setAiDrawerOpen] = useState(false);
+
+  // ── Staff Engineer Suite hooks ──
+  const { totalCost, breakdown } = useCostCalculator(nodes);
+  const trafficSim = useTrafficSimulation(nodes, edges, setNodes, setEdges);
+  const aiReview = useArchitectureReview(nodes, edges);
 
   // --- Connection handler: creates a directed edge with editable label ---
   const onConnect = useCallback(
@@ -45,6 +66,31 @@ function Flow() {
         data: { label: '' },
       };
       setEdges((eds) => addEdge(edge, eds));
+    },
+    [setEdges],
+  );
+
+  // --- Edge update handler: allows dragging edge endpoints to reconnect ---
+  const edgeUpdateSuccessful = useRef(true);
+
+  const onEdgeUpdateStart = useCallback(() => {
+    edgeUpdateSuccessful.current = false;
+  }, []);
+
+  const onEdgeUpdate = useCallback(
+    (oldEdge: Edge, newConnection: Connection) => {
+      edgeUpdateSuccessful.current = true;
+      setEdges((eds) => updateEdge(oldEdge, newConnection, eds));
+    },
+    [setEdges],
+  );
+
+  const onEdgeUpdateEnd = useCallback(
+    (_: MouseEvent | TouchEvent, edge: Edge) => {
+      if (!edgeUpdateSuccessful.current) {
+        setEdges((eds) => eds.filter((e) => e.id !== edge.id));
+      }
+      edgeUpdateSuccessful.current = true;
     },
     [setEdges],
   );
@@ -149,6 +195,11 @@ function Flow() {
     event.target.value = '';
   }, []);
 
+  // ── IaC export: parse graph and generate code ──
+  const parsedGraph = useMemo(() => parseGraphToIaC(nodes, edges), [nodes, edges]);
+  const kubernetesYAML = useMemo(() => generateKubernetesYAML(parsedGraph), [parsedGraph]);
+  const goFiles = useMemo(() => generateGoProject(parsedGraph), [parsedGraph]);
+
   return (
     <div
       style={{
@@ -166,11 +217,15 @@ function Flow() {
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
+          onEdgeUpdate={onEdgeUpdate}
+          onEdgeUpdateStart={onEdgeUpdateStart}
+          onEdgeUpdateEnd={onEdgeUpdateEnd}
           onInit={setRfInstance}
           onDrop={onDrop}
           onDragOver={onDragOver}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
+          edgeUpdatable
           deleteKeyCode="Backspace"
           fitView
           proOptions={{ hideAttribution: true }}
@@ -215,6 +270,88 @@ function Flow() {
               <Upload size={14} /> Load
               <input type="file" accept=".json" hidden onChange={onRestore} />
             </label>
+            <button
+              id="iac-export-btn"
+              onClick={() => setExportOpen(true)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '6px 12px',
+                background: 'linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)',
+                color: '#e2e8f0',
+                border: '1px solid #6366f1',
+                borderRadius: 6,
+                fontSize: 12,
+                fontWeight: 500,
+                cursor: 'pointer',
+                fontFamily: 'Inter, system-ui, sans-serif',
+                boxShadow: '0 2px 8px rgba(99, 102, 241, 0.25)',
+                transition: 'box-shadow 0.15s, transform 0.1s',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.boxShadow = '0 4px 16px rgba(99, 102, 241, 0.45)';
+                e.currentTarget.style.transform = 'translateY(-1px)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.boxShadow = '0 2px 8px rgba(99, 102, 241, 0.25)';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}
+            >
+              <FileCode2 size={14} />
+              Export Code
+            </button>
+
+            {/* Staff Suite: Simulation Controls */}
+            <SimulationControls
+              isSimulating={trafficSim.isSimulating}
+              globalRPS={trafficSim.globalRPS}
+              onRPSChange={trafficSim.setGlobalRPS}
+              onToggle={trafficSim.toggleSimulation}
+            />
+
+            {/* Staff Suite: AI Review Button */}
+            <button
+              id="ai-review-btn"
+              onClick={() => {
+                setAiDrawerOpen(true);
+                if (!aiReview.review && !aiReview.isLoading) {
+                  aiReview.requestReview();
+                }
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '6px 12px',
+                background: 'linear-gradient(135deg, #e11d48 0%, #f43f5e 100%)',
+                color: '#fff',
+                border: '1px solid #f43f5e',
+                borderRadius: 6,
+                fontSize: 12,
+                fontWeight: 500,
+                cursor: 'pointer',
+                fontFamily: 'Inter, system-ui, sans-serif',
+                boxShadow: '0 2px 8px rgba(244, 63, 94, 0.25)',
+                transition: 'box-shadow 0.15s, transform 0.1s',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.boxShadow = '0 4px 16px rgba(244, 63, 94, 0.45)';
+                e.currentTarget.style.transform = 'translateY(-1px)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.boxShadow = '0 2px 8px rgba(244, 63, 94, 0.25)';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}
+            >
+              <Brain size={14} />
+              AI Review
+            </button>
+          </Panel>
+
+          {/* Staff Suite: Cost Estimator */}
+          <Panel position="bottom-left">
+            <CostWidget totalCost={totalCost} breakdown={breakdown} />
           </Panel>
           <Controls
             position="bottom-right"
@@ -241,6 +378,22 @@ function Flow() {
             color="#1e293b"
           />
         </ReactFlow>
+        <ExportModal
+          isOpen={exportOpen}
+          onClose={() => setExportOpen(false)}
+          kubernetesYAML={kubernetesYAML}
+          goFiles={goFiles}
+        />
+
+        {/* Staff Suite: AI Review Drawer */}
+        <AIReviewDrawer
+          isOpen={aiDrawerOpen}
+          onClose={() => setAiDrawerOpen(false)}
+          review={aiReview.review}
+          isLoading={aiReview.isLoading}
+          error={aiReview.error}
+          onRetry={aiReview.requestReview}
+        />
       </div>
     </div>
   );
