@@ -105,8 +105,19 @@ function Flow() {
     (event: React.DragEvent) => {
       event.preventDefault();
 
-      const type = event.dataTransfer.getData('application/systemdesign');
-      if (!type || !rfInstance) return;
+      const payload = event.dataTransfer.getData('application/systemdesign');
+      if (!payload || !rfInstance) return;
+
+      let type = payload;
+      let cost: number | undefined;
+
+      try {
+        const parsed = JSON.parse(payload);
+        type = parsed.type;
+        cost = parsed.cost;
+      } catch (e) {
+        // Fallback for older dragged items if any
+      }
 
       const position = rfInstance.screenToFlowPosition({
         x: event.clientX,
@@ -117,7 +128,7 @@ function Flow() {
         id: getNodeId(),
         type: 'custom',
         position,
-        data: { type, label: type },
+        data: { type, label: type, cost },
       };
 
       setNodes((nds) => nds.concat(newNode));
@@ -378,23 +389,24 @@ function Flow() {
             color="#1e293b"
           />
         </ReactFlow>
-        <ExportModal
-          isOpen={exportOpen}
-          onClose={() => setExportOpen(false)}
-          kubernetesYAML={kubernetesYAML}
-          goFiles={goFiles}
-        />
-
-        {/* Staff Suite: AI Review Drawer */}
-        <AIReviewDrawer
-          isOpen={aiDrawerOpen}
-          onClose={() => setAiDrawerOpen(false)}
-          review={aiReview.review}
-          isLoading={aiReview.isLoading}
-          error={aiReview.error}
-          onRetry={aiReview.requestReview}
-        />
       </div>
+
+      {/* Modals & drawers rendered outside ReactFlow container to avoid stacking context issues */}
+      <ExportModal
+        isOpen={exportOpen}
+        onClose={() => setExportOpen(false)}
+        kubernetesYAML={kubernetesYAML}
+        goFiles={goFiles}
+      />
+
+      <AIReviewDrawer
+        isOpen={aiDrawerOpen}
+        onClose={() => setAiDrawerOpen(false)}
+        review={aiReview.review}
+        isLoading={aiReview.isLoading}
+        error={aiReview.error}
+        onRetry={aiReview.requestReview}
+      />
     </div>
   );
 }

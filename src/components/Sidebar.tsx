@@ -33,8 +33,11 @@ import {
   Rocket,
   Key,
   Route,
-  Box
+  Box,
+  DollarSign
 } from 'lucide-react';
+import { useState } from 'react';
+import { COST_MAP } from '../hooks/useCostCalculator';
 
 interface ComponentDef {
   type: string;
@@ -93,8 +96,16 @@ const components: ComponentDef[] = [
 ];
 
 export default function Sidebar() {
+  const [costs, setCosts] = useState<Record<string, number>>(COST_MAP);
+
+  const handleCostChange = (type: string, value: string) => {
+    const num = parseInt(value, 10);
+    setCosts(prev => ({ ...prev, [type]: isNaN(num) ? 0 : num }));
+  };
+
   const onDragStart = (event: React.DragEvent, nodeType: string) => {
-    event.dataTransfer.setData('application/systemdesign', nodeType);
+    // Pass type and the currently specified cost for this component
+    event.dataTransfer.setData('application/systemdesign', JSON.stringify({ type: nodeType, cost: costs[nodeType] }));
     event.dataTransfer.effectAllowed = 'move';
   };
 
@@ -164,8 +175,50 @@ export default function Sidebar() {
                     (e.currentTarget as HTMLDivElement).style.background = '#1e293b';
                   }}
                 >
-                  <Icon size={16} color={color} />
-                  <span style={{ fontSize: 12, color: '#cbd5e1', fontWeight: 500 }}>{type}</span>
+                  <Icon size={16} color={color} style={{ flexShrink: 0 }} />
+                  <span style={{ fontSize: 12, color: '#cbd5e1', fontWeight: 500, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {type}
+                  </span>
+                  
+                  {/* Cost Input for new nodes */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 2,
+                      background: '#0f172a',
+                      padding: '2px 4px',
+                      borderRadius: 4,
+                      border: '1px solid #334155',
+                    }}
+                    onClick={(e) => e.stopPropagation()} // prevent drag interference when clicking input
+                    onDragStart={(e) => {
+                      // allow dragging the input without triggering the node drag
+                      if ((e.target as HTMLElement).tagName === 'INPUT') {
+                        e.stopPropagation();
+                        e.preventDefault();
+                      }
+                    }}
+                  >
+                    <DollarSign size={10} color="#10b981" />
+                    <input
+                      type="text"
+                      value={costs[type] ?? 0}
+                      onChange={(e) => handleCostChange(type, e.target.value)}
+                      style={{
+                        width: 24,
+                        background: 'transparent',
+                        border: 'none',
+                        color: '#10b981',
+                        fontSize: 10,
+                        fontWeight: 600,
+                        outline: 'none',
+                        fontFamily: 'Inter, system-ui, sans-serif',
+                        fontVariantNumeric: 'tabular-nums',
+                        textAlign: 'right',
+                      }}
+                    />
+                  </div>
                 </div>
               ))}
           </div>

@@ -35,8 +35,10 @@ import {
   Rocket,
   Key,
   Route,
-  Box
+  Box,
+  DollarSign
 } from 'lucide-react';
+import { COST_MAP } from '../hooks/useCostCalculator';
 
 const iconConfig: Record<string, { icon: React.ElementType; color: string; bg: string }> = {
   // Clients
@@ -99,6 +101,10 @@ function CustomNode({ id, data }: NodeProps) {
   const [inputValue, setInputValue] = useState(data.label as string);
   const [editingNote, setEditingNote] = useState(false);
   const [noteValue, setNoteValue] = useState((data.note as string) || '');
+  const [editingCost, setEditingCost] = useState(false);
+  const defaultCost = COST_MAP[(data.type as string) ?? ''] ?? 0;
+  const currentCost = (data.cost as number) ?? defaultCost;
+  const [costValue, setCostValue] = useState(String(currentCost));
 
   const config = iconConfig[data.type as string] || iconConfig['Microservice'];
   const Icon = config.icon;
@@ -120,6 +126,18 @@ function CustomNode({ id, data }: NodeProps) {
       ),
     );
   }, [id, noteValue, setNodes]);
+
+  const finishEditingCost = useCallback(() => {
+    setEditingCost(false);
+    const parsed = parseFloat(costValue);
+    const finalCost = isNaN(parsed) ? defaultCost : Math.max(0, Math.round(parsed));
+    setCostValue(String(finalCost));
+    setNodes((nds) =>
+      nds.map((n) =>
+        n.id === id ? { ...n, data: { ...n.data, cost: finalCost } } : n,
+      ),
+    );
+  }, [id, costValue, defaultCost, setNodes]);
 
 
   // Determine simulation status styling
@@ -268,6 +286,63 @@ function CustomNode({ id, data }: NodeProps) {
         >
           <FileText size={14} />
         </button>
+      </div>
+
+      {/* Cost Row */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 4,
+          padding: '4px 2px',
+          borderTop: '1px solid #334155',
+        }}
+      >
+        <DollarSign size={12} color="#10b981" style={{ flexShrink: 0 }} />
+        {editingCost ? (
+          <input
+            value={costValue}
+            onChange={(e) => setCostValue(e.target.value)}
+            onBlur={finishEditingCost}
+            onKeyDown={(e) => {
+              e.stopPropagation();
+              if (e.key === 'Enter') finishEditingCost();
+            }}
+            autoFocus
+            className="nodrag nopan"
+            style={{
+              background: '#0f172a',
+              color: '#10b981',
+              fontSize: 11,
+              fontWeight: 600,
+              padding: '1px 6px',
+              border: '1px solid #10b981',
+              borderRadius: 4,
+              outline: 'none',
+              width: 50,
+              fontFamily: 'Inter, system-ui, sans-serif',
+              fontVariantNumeric: 'tabular-nums',
+            }}
+          />
+        ) : (
+          <span
+            onClick={() => {
+              setCostValue(String(currentCost));
+              setEditingCost(true);
+            }}
+            style={{
+              fontSize: 11,
+              fontWeight: 600,
+              color: '#10b981',
+              cursor: 'pointer',
+              fontFamily: 'Inter, system-ui, sans-serif',
+              fontVariantNumeric: 'tabular-nums',
+            }}
+          >
+            {currentCost}
+          </span>
+        )}
+        <span style={{ fontSize: 10, color: '#475569' }}>/mo</span>
       </div>
 
       {/* Note Section */}

@@ -74,7 +74,9 @@ export function useCostCalculator(nodes: Node[]): CostResult {
     for (const node of nodes) {
       const type = (node.data?.type as string) ?? '';
       const label = (node.data?.label as string) ?? type;
-      const cost = COST_MAP[type] ?? 0;
+      // Use custom cost from node data if set, otherwise fall back to COST_MAP
+      const customCost = node.data?.cost as number | undefined;
+      const cost = customCost ?? COST_MAP[type] ?? 0;
 
       if (cost > 0) {
         breakdown.push({ id: node.id, type, label, cost });

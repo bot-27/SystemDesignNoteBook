@@ -24,15 +24,20 @@ export function useTrafficSimulation(
   const [isSimulating, setIsSimulating] = useState(false);
   const [globalRPS, setGlobalRPS] = useState(500);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   // Keep latest refs so the interval callback always sees current state
   const nodesRef = useRef(nodes);
   const edgesRef = useRef(edges);
+  const globalRPSRef = useRef(globalRPS);
   nodesRef.current = nodes;
   edgesRef.current = edges;
+  globalRPSRef.current = globalRPS;
 
+  // The tick function reads everything from refs — no stale closures
   const runTick = useCallback(() => {
     const currentNodes = nodesRef.current;
     const currentEdges = edgesRef.current;
+    const rps = globalRPSRef.current;
 
     // Build adjacency: for each node, count incoming edges
     const incomingCount = new Map<string, number>();
@@ -47,7 +52,6 @@ export function useTrafficSimulation(
 
     for (const e of currentEdges) {
       incomingCount.set(e.target, (incomingCount.get(e.target) ?? 0) + 1);
-      // Check if this edge goes from a compute node to a storage node
       const targetType = nodeTypeMap.get(e.target) ?? '';
       if (STORAGE_TYPES.has(targetType)) {
         hasStorageDownstream.add(e.source);
@@ -56,7 +60,7 @@ export function useTrafficSimulation(
 
     // Count client nodes as traffic sources
     const clientCount = currentNodes.filter(n => CLIENT_TYPES.has((n.data?.type as string) ?? '')).length;
-    const rpsPerClient = clientCount > 0 ? nodesRef.current.length > 0 ? globalRPS / Math.max(clientCount, 1) : 0 : globalRPS;
+    const rpsPerClient = clientCount > 0 ? rps / Math.max(clientCount, 1) : rps;
 
     // Determine which compute nodes are overloaded
     const crashedNodeIds = new Set<string>();
@@ -68,7 +72,7 @@ export function useTrafficSimulation(
       const nodeLoad = inCount * rpsPerClient;
 
       // Crash condition: compute node receiving significant traffic but no cache/db downstream
-      if (nodeLoad > globalRPS * 0.3 && !hasStorageDownstream.has(n.id) && inCount > 0) {
+      if (nodeLoad > rps * 0.3 && !hasStorageDownstream.has(n.id) && inCount > 0) {
         crashedNodeIds.add(n.id);
       }
     }
@@ -77,7 +81,6 @@ export function useTrafficSimulation(
     setNodes(nds => nds.map(n => {
       const type = (n.data?.type as string) ?? '';
       if (!COMPUTE_TYPES.has(type)) {
-        // Clear any lingering status for non-compute nodes
         if (n.data?.status) {
           return { ...n, data: { ...n.data, status: undefined } };
         }
@@ -92,8 +95,8 @@ export function useTrafficSimulation(
     // Update edges: animate and vary strokeWidth
     setEdges(eds => eds.map(e => {
       const inCount = incomingCount.get(e.target) ?? 1;
-      const load = Math.min(inCount * rpsPerClient / globalRPS, 1);
-      const strokeWidth = 2 + load * 4; // 2px base, up to 6px at full load
+      const load = Math.min(inCount * rpsPerClient / rps, 1);
+      const strokeWidth = 2 + load * 4;
 
       return {
         ...e,
@@ -105,15 +108,10 @@ export function useTrafficSimulation(
         },
       };
     }));
-  }, [globalRPS, setNodes, setEdges]);
+  }, [setNodes, setEdges]);
 
-  const stopSimulation = useCallback(() => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-
-    // Reset all edges and nodes
+  // Reset all visual state
+  const resetVisuals = useCallback(() => {
     setEdges(eds => eds.map(e => ({
       ...e,
       animated: false,
@@ -132,38 +130,47 @@ export function useTrafficSimulation(
     }));
   }, [setEdges, setNodes]);
 
+  // Toggle just flips the boolean — the effect handles everything else
   const toggleSimulation = useCallback(() => {
-    setIsSimulating(prev => {
-      if (prev) {
-        // Stopping
-        stopSimulation();
-        return false;
-      } else {
-        // Starting — run first tick immediately, then on interval
-        runTick();
-        intervalRef.current = setInterval(runTick, 1500);
-        return true;
-      }
-    });
-  }, [runTick, stopSimulation]);
+    setIsSimulating(prev => !prev);
+  }, []);
 
-  // Re-run tick when globalRPS changes during simulation
+  // Single effect that owns the interval lifecycle
   useEffect(() => {
-    if (!isSimulating) return;
-    // Clear and restart interval with new RPS
-    if (intervalRef.current) clearInterval(intervalRef.current);
+    if (isSimulating) {
+      // Start: run first tick immediately, then on interval
+      runTick();
+      intervalRef.current = setInterval(runTick, 1500);
+
+      return () => {
+        // Cleanup when stopping or deps change
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current);
+          intervalRef.current = null;
+        }
+        resetVisuals();
+      };
+    }
+    // If not simulating, ensure everything is clean
+    return undefined;
+  }, [isSimulating, runTick, resetVisuals]);
+
+  // When RPS changes during simulation, restart the interval
+  useEffect(() => {
+    if (!isSimulating || !intervalRef.current) return;
+
+    clearInterval(intervalRef.current);
     runTick();
     intervalRef.current = setInterval(runTick, 1500);
-
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
   }, [globalRPS, isSimulating, runTick]);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
     };
   }, []);
 
