@@ -1,5 +1,7 @@
 import { memo, useState, useCallback } from 'react';
 import { Handle, Position, useReactFlow, type NodeProps } from 'reactflow';
+import { NodeResizer } from '@reactflow/node-resizer';
+import '@reactflow/node-resizer/dist/style.css';
 import {
   Monitor,
   Globe,
@@ -95,7 +97,7 @@ const handleStyle = {
   border: '2px solid #334155',
 };
 
-function CustomNode({ id, data }: NodeProps) {
+function CustomNode({ id, data, selected }: NodeProps) {
   const { setNodes } = useReactFlow();
   const [editing, setEditing] = useState(false);
   const [inputValue, setInputValue] = useState(data.label as string);
@@ -139,6 +141,17 @@ function CustomNode({ id, data }: NodeProps) {
     );
   }, [id, costValue, defaultCost, setNodes]);
 
+  const replicas = (data.replicas as number) ?? 1;
+  const instanceSize = (data.instanceSize as string) ?? 'Medium';
+
+  const updateScale = useCallback((newReplicas: number, newSize: string) => {
+    setNodes((nds) =>
+      nds.map((n) =>
+        n.id === id ? { ...n, data: { ...n.data, replicas: newReplicas, instanceSize: newSize } } : n
+      )
+    );
+  }, [id, setNodes]);
+
 
   // Determine simulation status styling
   const status = data.status as string | undefined;
@@ -157,6 +170,8 @@ function CustomNode({ id, data }: NodeProps) {
       ? 'healthy-pulse 2s ease-in-out infinite'
       : 'none';
 
+  const isContainer = ['Server', 'VPC / Network', 'Kubernetes Cluster'].includes(data.type as string);
+
   return (
     <div
       style={{
@@ -172,8 +187,17 @@ function CustomNode({ id, data }: NodeProps) {
         animation: containerAnimation,
         transition: 'background 0.3s, border 0.3s',
         position: 'relative',
+        zIndex: isContainer ? -1 : 1,
+        width: '100%',
+        height: '100%',
       }}
     >
+      <NodeResizer 
+        color="#3b82f6" 
+        isVisible={selected} 
+        minWidth={160} 
+        minHeight={60} 
+      />
       {/* Crash badge */}
       {isCrashed && (
         <div style={{
@@ -394,6 +418,76 @@ function CustomNode({ id, data }: NodeProps) {
               {data.note as string}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Scale Badge (Visible when NOT selected) */}
+      {!selected && (replicas > 1 || instanceSize !== 'Medium') && (
+        <div style={{
+          position: 'absolute',
+          bottom: -10,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          background: '#334155',
+          color: '#e2e8f0',
+          fontSize: 10,
+          fontWeight: 600,
+          padding: '2px 8px',
+          borderRadius: 10,
+          border: '1px solid #475569',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
+          whiteSpace: 'nowrap',
+          zIndex: 10,
+        }}>
+          {replicas}x {instanceSize}
+        </div>
+      )}
+
+      {/* Scaling Controls (Visible when selected) */}
+      {selected && (
+        <div className="nodrag nopan" style={{
+          borderTop: '1px solid #334155',
+          paddingTop: 8,
+          marginTop: 4,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 6,
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 500 }}>Replicas</span>
+            <div style={{ display: 'flex', alignItems: 'center', background: '#0f172a', borderRadius: 4, overflow: 'hidden', border: '1px solid #334155' }}>
+              <button 
+                onClick={() => updateScale(Math.max(1, replicas - 1), instanceSize)}
+                style={{ background: 'transparent', border: 'none', color: '#e2e8f0', padding: '2px 8px', cursor: 'pointer', fontSize: 12 }}>-</button>
+              <span style={{ fontSize: 11, color: '#e2e8f0', padding: '0 4px', minWidth: 20, textAlign: 'center', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{replicas}</span>
+              <button 
+                onClick={() => updateScale(replicas + 1, instanceSize)}
+                style={{ background: 'transparent', border: 'none', color: '#e2e8f0', padding: '2px 8px', cursor: 'pointer', fontSize: 12 }}>+</button>
+            </div>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 500 }}>Size</span>
+            <select
+              value={instanceSize}
+              onChange={(e) => updateScale(replicas, e.target.value)}
+              style={{
+                background: '#0f172a',
+                color: '#e2e8f0',
+                border: '1px solid #334155',
+                borderRadius: 4,
+                fontSize: 10,
+                padding: '2px 4px',
+                outline: 'none',
+                cursor: 'pointer',
+                fontFamily: 'Inter, system-ui, sans-serif',
+              }}
+            >
+              <option value="Small">Small</option>
+              <option value="Medium">Medium</option>
+              <option value="Large">Large</option>
+              <option value="X-Large">X-Large</option>
+            </select>
+          </div>
         </div>
       )}
     </div>

@@ -130,3 +130,10 @@ input[type="range"]::-moz-range-thumb {
   100% { background: rgba(15, 23, 42, 0.7); }
 }
 
+/* ── Container Drag Over Highlight ── */
+.drag-over-container > div {
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 15px rgba(59, 130, 246, 0.5) !important;
+  transform: scale(1.02);
+}
+

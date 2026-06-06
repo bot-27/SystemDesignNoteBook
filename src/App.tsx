@@ -11,8 +11,10 @@ import ReactFlow, {
   ReactFlowProvider,
   MarkerType,
   BackgroundVariant,
+  useReactFlow,
   type Connection,
   type Edge,
+  type Node,
   type ReactFlowInstance,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
@@ -41,7 +43,7 @@ const nodeTypes = { custom: CustomNode };
 const edgeTypes = { editable: EditableEdge };
 
 let nodeId = 0;
-const getNodeId = () => `node_${nodeId++}`;
+const getNodeId = () => `node_${Date.now()}_${nodeId++}`;
 
 function formatTimeAgo(date: Date): string {
   const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
@@ -59,6 +61,7 @@ function Flow() {
   const [rfInstance, setRfInstance] = useState<ReactFlowInstance | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const [aiDrawerOpen, setAiDrawerOpen] = useState(false);
+  const { getIntersectingNodes } = useReactFlow();
 
   // ── Staff Engineer Suite hooks ──
   const { totalCost, breakdown } = useCostCalculator(nodes);
@@ -110,7 +113,83 @@ function Flow() {
   const onDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault();
     event.dataTransfer.dropEffect = 'move';
-  }, []);
+
+    if (!rfInstance) return;
+
+    const position = rfInstance.screenToFlowPosition({
+      x: event.clientX,
+      y: event.clientY,
+    });
+
+    // Pass a Rect instead of a Node object so it doesn't try to look up the ID
+    const intersections = getIntersectingNodes({
+      x: position.x,
+      y: position.y,
+      width: 160,
+      height: 60,
+    })
+      .filter((n) => ['Server', 'VPC / Network', 'Kubernetes Cluster'].includes(n.data?.type as string))
+      .map((n) => n.id);
+
+    document.querySelectorAll('.react-flow__node').forEach((el) => {
+      const nodeId = el.getAttribute('data-id');
+      if (nodeId && intersections.includes(nodeId)) {
+        el.classList.add('drag-over-container');
+      } else {
+        el.classList.remove('drag-over-container');
+      }
+    });
+  }, [rfInstance, getIntersectingNodes]);
+
+  const onNodeDragStop = useCallback(
+    (_: React.MouseEvent, node: Node) => {
+      const intersections = getIntersectingNodes(node).filter((n) =>
+        ['Server', 'VPC / Network', 'Kubernetes Cluster'].includes(n.data?.type as string)
+      );
+
+      if (intersections.length > 0) {
+        const parentNode = intersections[0];
+        
+        if (node.parentNode === parentNode.id) return;
+
+        setNodes((nds) =>
+          nds.map((n) => {
+            if (n.id === node.id) {
+              return {
+                ...n,
+                parentNode: parentNode.id,
+                extent: 'parent',
+                position: {
+                  x: (node.positionAbsolute?.x ?? node.position.x) - (parentNode.positionAbsolute?.x ?? parentNode.position.x),
+                  y: (node.positionAbsolute?.y ?? node.position.y) - (parentNode.positionAbsolute?.y ?? parentNode.position.y),
+                },
+              };
+            }
+            return n;
+          })
+        );
+      }
+    },
+    [getIntersectingNodes, setNodes]
+  );
+
+  const onNodeDrag = useCallback(
+    (_: React.MouseEvent, node: Node) => {
+      const intersections = getIntersectingNodes(node)
+        .filter((n) => ['Server', 'VPC / Network', 'Kubernetes Cluster'].includes(n.data?.type as string))
+        .map((n) => n.id);
+
+      document.querySelectorAll('.react-flow__node').forEach((el) => {
+        const nodeId = el.getAttribute('data-id');
+        if (nodeId && intersections.includes(nodeId)) {
+          el.classList.add('drag-over-container');
+        } else {
+          el.classList.remove('drag-over-container');
+        }
+      });
+    },
+    [getIntersectingNodes]
+  );
 
   const onDrop = useCallback(
     (event: React.DragEvent) => {
@@ -135,16 +214,37 @@ function Flow() {
         y: event.clientY,
       });
 
-      const newNode = {
+      const newNode: Node = {
         id: getNodeId(),
         type: 'custom',
         position,
         data: { type, label: type, cost },
       };
 
+      const intersections = getIntersectingNodes({
+        x: position.x,
+        y: position.y,
+        width: 160,
+        height: 60,
+      }).filter((n) => ['Server', 'VPC / Network', 'Kubernetes Cluster'].includes(n.data?.type as string));
+
+      if (intersections.length > 0) {
+        const parentNode = intersections[0];
+        newNode.parentNode = parentNode.id;
+        newNode.extent = 'parent';
+        newNode.position = {
+          x: position.x - (parentNode.positionAbsolute?.x ?? parentNode.position.x),
+          y: position.y - (parentNode.positionAbsolute?.y ?? parentNode.position.y),
+        };
+      }
+
       setNodes((nds) => nds.concat(newNode));
+
+      document.querySelectorAll('.react-flow__node').forEach((el) => {
+        el.classList.remove('drag-over-container');
+      });
     },
-    [rfInstance, setNodes],
+    [rfInstance, getIntersectingNodes, setNodes],
   );
 
   const onSave = useCallback(() => {
@@ -245,11 +345,14 @@ function Flow() {
           onInit={setRfInstance}
           onDrop={onDrop}
           onDragOver={onDragOver}
+          onNodeDrag={onNodeDrag}
+          onNodeDragStop={onNodeDragStop}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
-          edgeUpdatable
+          edgesUpdatable
           deleteKeyCode="Backspace"
           fitView
+          panOnScroll
           proOptions={{ hideAttribution: true }}
           style={{ background: '#0a0f1a' }}
         >

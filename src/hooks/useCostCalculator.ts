@@ -74,9 +74,19 @@ export function useCostCalculator(nodes: Node[]): CostResult {
     for (const node of nodes) {
       const type = (node.data?.type as string) ?? '';
       const label = (node.data?.label as string) ?? type;
-      // Use custom cost from node data if set, otherwise fall back to COST_MAP
+      
       const customCost = node.data?.cost as number | undefined;
-      const cost = customCost ?? COST_MAP[type] ?? 0;
+      const baseCost = customCost ?? COST_MAP[type] ?? 0;
+
+      const replicas = (node.data?.replicas as number) ?? 1;
+      const instanceSize = (node.data?.instanceSize as string) ?? 'Medium';
+      
+      let sizeMultiplier = 1;
+      if (instanceSize === 'Small') sizeMultiplier = 0.5;
+      if (instanceSize === 'Large') sizeMultiplier = 2;
+      if (instanceSize === 'X-Large') sizeMultiplier = 4;
+
+      const cost = baseCost * replicas * sizeMultiplier;
 
       if (cost > 0) {
         breakdown.push({ id: node.id, type, label, cost });
