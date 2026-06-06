@@ -1,5 +1,6 @@
-import { useEffect, useRef } from 'react';
-import { X, Brain, RefreshCw, AlertTriangle, Loader2 } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { X, Brain, RefreshCw, AlertTriangle, Loader2, Send, MessageSquare, ChevronDown, ChevronUp } from 'lucide-react';
+import type { ChatMessage } from '../hooks/useArchitectureReview';
 
 interface AIReviewDrawerProps {
   isOpen: boolean;
@@ -8,6 +9,10 @@ interface AIReviewDrawerProps {
   isLoading: boolean;
   error: string | null;
   onRetry: () => void;
+  // Chat props
+  messages: ChatMessage[];
+  sendMessage: (message: string) => void;
+  isChatLoading: boolean;
 }
 
 export default function AIReviewDrawer({
@@ -17,15 +22,31 @@ export default function AIReviewDrawer({
   isLoading,
   error,
   onRetry,
+  messages,
+  sendMessage,
+  isChatLoading,
 }: AIReviewDrawerProps) {
   const contentRef = useRef<HTMLDivElement>(null);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const [chatInput, setChatInput] = useState('');
+  const [reviewCollapsed, setReviewCollapsed] = useState(false);
 
-  // Auto-scroll to bottom as review streams in
+  // Chat messages beyond the initial system + user + assistant (the review)
+  const chatMessages = messages.filter((_, i) => i >= 3);
+  const hasChatMessages = chatMessages.length > 0;
+
+  // Auto-scroll to bottom as review streams in or new chat messages arrive
   useEffect(() => {
-    if (contentRef.current && review) {
+    if (contentRef.current) {
       contentRef.current.scrollTop = contentRef.current.scrollHeight;
     }
-  }, [review]);
+  }, [review, messages]);
+
+  // Auto-scroll chat end into view
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
   // Close on Escape
   useEffect(() => {
@@ -36,6 +57,28 @@ export default function AIReviewDrawer({
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [isOpen, onClose]);
+
+  // Focus input when review completes
+  useEffect(() => {
+    if (review && !isLoading && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [review, isLoading]);
+
+  const handleSend = () => {
+    if (!chatInput.trim() || isChatLoading) return;
+    sendMessage(chatInput);
+    setChatInput('');
+    // Refocus input after send
+    setTimeout(() => inputRef.current?.focus(), 50);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -61,7 +104,7 @@ export default function AIReviewDrawer({
           top: 0,
           right: 0,
           bottom: 0,
-          width: 'min(440px, 90vw)',
+          width: 'min(480px, 92vw)',
           zIndex: 9999,
           background: 'linear-gradient(180deg, #111827 0%, #0f172a 100%)',
           borderLeft: '1px solid #1e293b',
@@ -140,7 +183,7 @@ export default function AIReviewDrawer({
           style={{
             flex: 1,
             overflowY: 'auto',
-            padding: 20,
+            padding: 0,
           }}
         >
           {/* Loading state */}
@@ -177,7 +220,7 @@ export default function AIReviewDrawer({
                 </div>
               </div>
               {/* Skeleton lines */}
-              <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
+              <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12, padding: '0 20px' }}>
                 {[100, 85, 92, 70, 95, 60].map((w, i) => (
                   <div
                     key={i}
@@ -242,6 +285,7 @@ export default function AIReviewDrawer({
               </div>
               <button
                 onClick={onRetry}
+                className="chat-btn-retry"
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -263,23 +307,130 @@ export default function AIReviewDrawer({
             </div>
           )}
 
-          {/* Review content */}
+          {/* ── Review section (collapsible once chat starts) ── */}
           {review && (
-            <div
-              style={{
-                fontSize: 13,
-                color: '#cbd5e1',
-                lineHeight: 1.75,
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-word',
-              }}
-            >
-              {renderFormattedReview(review)}
-              {isLoading && (
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#64748b' }}>
-                  <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />
-                </span>
+            <div style={{ borderBottom: hasChatMessages ? '1px solid #1e293b' : 'none' }}>
+              {/* Collapse toggle — only show when there are chat messages */}
+              {hasChatMessages && (
+                <button
+                  onClick={() => setReviewCollapsed(!reviewCollapsed)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    width: '100%',
+                    padding: '10px 20px',
+                    background: 'rgba(30, 41, 59, 0.5)',
+                    border: 'none',
+                    borderBottom: '1px solid #1e293b',
+                    color: '#94a3b8',
+                    fontSize: 11,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    fontFamily: 'Inter, system-ui, sans-serif',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                    transition: 'background 0.15s',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(30, 41, 59, 0.8)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(30, 41, 59, 0.5)'; }}
+                >
+                  <Brain size={12} />
+                  Initial Review
+                  {reviewCollapsed ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
+                </button>
               )}
+
+              {!reviewCollapsed && (
+                <div
+                  style={{
+                    fontSize: 13,
+                    color: '#cbd5e1',
+                    lineHeight: 1.75,
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                    padding: 20,
+                  }}
+                >
+                  {renderFormattedReview(review)}
+                  {isLoading && (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#64748b' }}>
+                      <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Chat messages section ── */}
+          {hasChatMessages && (
+            <div style={{ padding: '12px 16px' }}>
+              {/* Chat header */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  color: '#64748b',
+                  fontSize: 11,
+                  fontWeight: 600,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  marginBottom: 12,
+                  paddingLeft: 4,
+                }}
+              >
+                <MessageSquare size={12} />
+                Discussion
+              </div>
+
+              {chatMessages.map((msg, i) => (
+                <div
+                  key={i}
+                  style={{
+                    display: 'flex',
+                    justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start',
+                    marginBottom: 10,
+                    animation: 'chat-msgIn 0.25s ease-out',
+                  }}
+                >
+                  <div
+                    className={msg.role === 'user' ? 'chat-bubble-user' : 'chat-bubble-ai'}
+                    style={{
+                      maxWidth: '85%',
+                      padding: '10px 14px',
+                      borderRadius: msg.role === 'user'
+                        ? '14px 14px 4px 14px'
+                        : '14px 14px 14px 4px',
+                      fontSize: 13,
+                      lineHeight: 1.6,
+                      whiteSpace: 'pre-wrap',
+                      wordBreak: 'break-word',
+                      ...(msg.role === 'user'
+                        ? {
+                            background: 'linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)',
+                            color: '#f1f5f9',
+                            boxShadow: '0 2px 8px rgba(99, 102, 241, 0.2)',
+                          }
+                        : {
+                            background: '#1e293b',
+                            color: '#cbd5e1',
+                            border: '1px solid #334155',
+                          }),
+                    }}
+                  >
+                    {msg.role === 'assistant' ? renderFormattedReview(msg.content) : msg.content}
+                    {/* Show loading spinner on last assistant message while streaming */}
+                    {msg.role === 'assistant' && i === chatMessages.length - 1 && isChatLoading && (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#64748b', marginLeft: 4 }}>
+                        <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+              <div ref={chatEndRef} />
             </div>
           )}
 
@@ -325,38 +476,119 @@ export default function AIReviewDrawer({
           )}
         </div>
 
-        {/* Footer — re-analyze button when review is shown */}
+        {/* ── Chat input bar (shown after review is done) ── */}
         {review && !isLoading && (
           <div
             style={{
               borderTop: '1px solid #1e293b',
-              padding: '12px 20px',
+              padding: '12px 16px',
               display: 'flex',
-              justifyContent: 'flex-end',
+              gap: 8,
+              alignItems: 'flex-end',
+              flexShrink: 0,
+              background: 'rgba(15, 23, 42, 0.8)',
+              backdropFilter: 'blur(8px)',
+            }}
+          >
+            <textarea
+              ref={inputRef}
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Ask a follow-up question..."
+              rows={1}
+              className="chat-input"
+              style={{
+                flex: 1,
+                resize: 'none',
+                background: '#0f172a',
+                border: '1px solid #1e293b',
+                borderRadius: 10,
+                padding: '10px 14px',
+                color: '#e2e8f0',
+                fontSize: 13,
+                fontFamily: 'Inter, system-ui, sans-serif',
+                lineHeight: 1.5,
+                outline: 'none',
+                maxHeight: 120,
+                transition: 'border-color 0.15s',
+              }}
+              onFocus={(e) => { e.currentTarget.style.borderColor = '#4f46e5'; }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = '#1e293b'; }}
+              onInput={(e) => {
+                const target = e.currentTarget;
+                target.style.height = 'auto';
+                target.style.height = Math.min(target.scrollHeight, 120) + 'px';
+              }}
+            />
+            <button
+              onClick={handleSend}
+              disabled={!chatInput.trim() || isChatLoading}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 38,
+                height: 38,
+                borderRadius: 10,
+                border: 'none',
+                background: chatInput.trim() && !isChatLoading
+                  ? 'linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)'
+                  : '#1e293b',
+                color: chatInput.trim() && !isChatLoading ? '#fff' : '#475569',
+                cursor: chatInput.trim() && !isChatLoading ? 'pointer' : 'default',
+                flexShrink: 0,
+                transition: 'all 0.2s',
+                boxShadow: chatInput.trim() && !isChatLoading
+                  ? '0 2px 8px rgba(99, 102, 241, 0.3)'
+                  : 'none',
+              }}
+            >
+              {isChatLoading
+                ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
+                : <Send size={16} />}
+            </button>
+          </div>
+        )}
+
+        {/* Footer — re-analyze button when review is shown and not chatting */}
+        {review && !isLoading && (
+          <div
+            style={{
+              borderTop: '1px solid #1e293b',
+              padding: '10px 16px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
               flexShrink: 0,
               background: 'rgba(15, 23, 42, 0.6)',
             }}
           >
+            <span style={{ fontSize: 10, color: '#475569' }}>
+              {hasChatMessages
+                ? `${chatMessages.length} message${chatMessages.length !== 1 ? 's' : ''} in discussion`
+                : 'Ask follow-up questions above'}
+            </span>
             <button
               onClick={onRetry}
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: 6,
-                padding: '8px 16px',
+                padding: '6px 14px',
                 background: 'linear-gradient(135deg, #f43f5e 0%, #e11d48 100%)',
                 color: '#fff',
                 border: 'none',
                 borderRadius: 8,
-                fontSize: 12,
+                fontSize: 11,
                 fontWeight: 500,
                 cursor: 'pointer',
                 fontFamily: 'Inter, system-ui, sans-serif',
                 boxShadow: '0 2px 8px rgba(244, 63, 94, 0.25)',
               }}
             >
-              <RefreshCw size={14} />
-              Re-Analyze
+              <RefreshCw size={12} />
+              New Review
             </button>
           </div>
         )}

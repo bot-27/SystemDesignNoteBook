@@ -17,7 +17,7 @@ import ReactFlow, {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 
-import { Save, Upload, FileCode2, Brain } from 'lucide-react';
+import { Save, Upload, FileCode2, Brain, Check, CloudUpload, RotateCw } from 'lucide-react';
 
 import ExportModal from './components/ExportModal';
 import { parseGraphToIaC } from './utils/parseGraphToIaC';
@@ -31,6 +31,7 @@ import EditableEdge from './components/EditableEdge';
 import { useCostCalculator } from './hooks/useCostCalculator';
 import { useTrafficSimulation } from './hooks/useTrafficSimulation';
 import { useArchitectureReview } from './hooks/useArchitectureReview';
+import { useAutosave } from './hooks/useAutosave';
 import CostWidget from './components/CostWidget';
 import SimulationControls from './components/SimulationControls';
 import AIReviewDrawer from './components/AIReviewDrawer';
@@ -41,6 +42,15 @@ const edgeTypes = { editable: EditableEdge };
 
 let nodeId = 0;
 const getNodeId = () => `node_${nodeId++}`;
+
+function formatTimeAgo(date: Date): string {
+  const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (seconds < 10) return 'just now';
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  return `${Math.floor(minutes / 60)}h ago`;
+}
 
 function Flow() {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
@@ -54,6 +64,7 @@ function Flow() {
   const { totalCost, breakdown } = useCostCalculator(nodes);
   const trafficSim = useTrafficSimulation(nodes, edges, setNodes, setEdges);
   const aiReview = useArchitectureReview(nodes, edges);
+  const autosave = useAutosave(rfInstance, nodes, edges, setNodes, setEdges);
 
   // --- Connection handler: creates a directed edge with editable label ---
   const onConnect = useCallback(
@@ -242,7 +253,47 @@ function Flow() {
           proOptions={{ hideAttribution: true }}
           style={{ background: '#0a0f1a' }}
         >
-          <Panel position="top-right" style={{ display: 'flex', gap: 10 }}>
+          <Panel position="top-right" style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            {/* Autosave indicator */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 5,
+                padding: '5px 10px',
+                background: 'rgba(15, 23, 42, 0.7)',
+                backdropFilter: 'blur(8px)',
+                borderRadius: 6,
+                fontSize: 10,
+                fontWeight: 500,
+                color: autosave.status === 'saved' || autosave.status === 'restored'
+                  ? '#4ade80'
+                  : autosave.status === 'saving'
+                  ? '#facc15'
+                  : '#64748b',
+                border: '1px solid #1e293b',
+                transition: 'all 0.3s ease',
+                animation: autosave.status === 'restored' ? 'autosave-flash 1.5s ease' : undefined,
+              }}
+            >
+              {autosave.status === 'saving' && (
+                <CloudUpload size={11} style={{ animation: 'spin 1.5s linear infinite' }} />
+              )}
+              {(autosave.status === 'saved' || autosave.status === 'restored') && (
+                <Check size={11} />
+              )}
+              {autosave.status === 'idle' && (
+                <RotateCw size={11} />
+              )}
+              {autosave.status === 'saving' && 'Saving…'}
+              {autosave.status === 'saved' && (
+                autosave.lastSavedAt
+                  ? `Saved ${formatTimeAgo(autosave.lastSavedAt)}`
+                  : 'Saved'
+              )}
+              {autosave.status === 'restored' && 'Restored'}
+              {autosave.status === 'idle' && 'Autosave'}
+            </div>
             <button
               onClick={onSave}
               style={{
@@ -406,6 +457,9 @@ function Flow() {
         isLoading={aiReview.isLoading}
         error={aiReview.error}
         onRetry={aiReview.requestReview}
+        messages={aiReview.messages}
+        sendMessage={aiReview.sendMessage}
+        isChatLoading={aiReview.isChatLoading}
       />
     </div>
   );
